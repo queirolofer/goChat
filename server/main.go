@@ -8,21 +8,29 @@ import (
 	"sync"
 )
 
-const exitCode  = "@#quit\n"
+const exitCode = "@#quit\n"
 
 
-func initializeClient (clientSocket net.Conn, clientsConnections * [] net.Conn){
+type cliente struct {
+	clientSocket net.Conn
+	idUsuario    int
+}
+
+func initializeClient(clientSocket net.Conn, clientsConnections *[] cliente) {
 	var waitGroup sync.WaitGroup
 	waitGroup.Add(1)
 	go listeningClient(&clientSocket, clientsConnections, &waitGroup)
 	waitGroup.Wait()
 }
 
-func listeningClient(clientSocket * net.Conn,  clientsConnections * [] net.Conn, waitGroup * sync.WaitGroup) {
+func listeningClient(clientSocket *net.Conn, clientsConnections *[] cliente, waitGroup *sync.WaitGroup) {
 	cadena, _ := bufio.NewReader(*clientSocket).ReadString('\n')
+
 	for strings.Compare(cadena, exitCode) != 0 {
+		fmt.Print("Usuario -> ", (*clientSocket).RemoteAddr(), "	MSG -> ")
+		fmt.Print(cadena)
+		sendMessage(clientSocket, clientsConnections, cadena)
 		cadena, _ = bufio.NewReader(*clientSocket).ReadString('\n')
-		sendMessage(clientSocket,clientsConnections,cadena)
 	}
 	fmt.Println("Cierro el socket")
 	err := (*clientSocket).Close()
@@ -32,15 +40,17 @@ func listeningClient(clientSocket * net.Conn,  clientsConnections * [] net.Conn,
 	waitGroup.Done()
 }
 
-func sendMessage(clientSocket *net.Conn, clientsConnections *[]net.Conn, cadena string) {
-	for _, v := range *clientsConnections  {
-		
+func sendMessage(clientSocket *net.Conn, clientsConnections *[]cliente, cadena string) {
+	for _, v := range *clientsConnections {
+		if (v.clientSocket.RemoteAddr() != (*clientSocket).RemoteAddr()) {
+			v.clientSocket.Write(([]byte) (fmt.Sprintf("[%d] : %s",v.idUsuario,cadena)))
+		}
 	}
-
 }
 
 func main() {
-	var clientsConnections []net.Conn
+	var clientsConnections []cliente
+	i := 1
 
 	fmt.Println("Iniciando el servidor")
 
@@ -57,7 +67,9 @@ func main() {
 		if err != nil {
 			fmt.Println("Error al establecer la conexion con el nuevo cliente", err)
 		}
-		clientsConnections = append(clientsConnections,conn)
+		clientsConnections = append(clientsConnections, cliente{conn,i})
+		i++
+		fmt.Println("Nueva Conexion", conn.RemoteAddr())
 		go initializeClient(conn, &clientsConnections)
 	}
 
